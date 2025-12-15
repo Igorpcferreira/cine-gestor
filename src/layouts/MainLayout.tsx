@@ -1,11 +1,12 @@
 import type { FC } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
+import { Footer } from './Footer';
 
 const MainLayout: FC = () => {
     return (
-        <>
+        <div className="d-flex flex-column min-vh-100">
             <nav className="navbar navbar-expand-lg cine-navbar mb-4">
-            <div className="container">
+                <div className="container">
                     <Link className="navbar-brand" to="/">
                         CineGestor
                     </Link>
@@ -46,10 +47,12 @@ const MainLayout: FC = () => {
                 </div>
             </nav>
 
-            <main className="container mb-5 cine-main">
+            <main className="container mb-5 cine-main flex-grow-1">
                 <Outlet />
             </main>
-        </>
+
+            <Footer />
+        </div>
     );
 };
 

@@ -1,7 +1,12 @@
 import {type ChangeEvent, type FormEvent, useEffect, useState } from 'react';
 import { salaSchema, type SalaFormData } from '../../schemas/salaSchema';
 import type { Sala } from '../../types/sala';
-import { listarSalas, criarSala, excluirSala } from '../../services/salasService';
+import {
+    listarSalas,
+    criarSala,
+    excluirSala,
+    atualizarSala,
+} from '../../services/salasService';
 
 type FormErrors = Partial<Record<keyof SalaFormData, string>>;
 
@@ -16,20 +21,12 @@ export default function SalasPage() {
     const [salas, setSalas] = useState<Sala[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [editingId, setEditingId] = useState<string | number | null>(null);
 
     useEffect(() => {
-        async function loadSalas() {
-            try {
-                const data = await listarSalas();
-                setSalas(data);
-            } catch (error) {
-                console.error('Erro ao carregar salas', error);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-
-        loadSalas();
+        listarSalas()
+            .then(setSalas)
+            .finally(() => setIsLoading(false));
     }, []);
 
     function handleChange(event: ChangeEvent<HTMLInputElement>) {
@@ -37,13 +34,25 @@ export default function SalasPage() {
 
         setForm(prev => ({
             ...prev,
-            [name]: name === 'numero' || name === 'capacidade' ? Number(value) || 0 : value,
+            [name]: Number(value) || 0,
         }));
 
-        setErrors(prev => ({
-            ...prev,
-            [name]: undefined,
-        }));
+        setErrors(prev => ({ ...prev, [name]: undefined }));
+    }
+
+    function preencherParaEdicao(sala: Sala) {
+        setEditingId(sala.id ?? null);
+        setForm({
+            numero: sala.numero,
+            capacidade: sala.capacidade,
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function cancelarEdicao() {
+        setEditingId(null);
+        setForm(emptyForm);
+        setErrors({});
     }
 
     async function handleSubmit(event: FormEvent) {
@@ -54,8 +63,7 @@ export default function SalasPage() {
         if (!result.success) {
             const fieldErrors: FormErrors = {};
             result.error.issues.forEach(issue => {
-                const fieldName = issue.path[0] as keyof SalaFormData;
-                fieldErrors[fieldName] = issue.message;
+                fieldErrors[issue.path[0] as keyof SalaFormData] = issue.message;
             });
             setErrors(fieldErrors);
             setIsSubmitting(false);
@@ -63,11 +71,19 @@ export default function SalasPage() {
         }
 
         try {
-            const novaSala = await criarSala(result.data);
-            setSalas(prev => [...prev, novaSala]);
-            setForm(emptyForm);
+            if (editingId !== null) {
+                const atualizada = await atualizarSala(editingId, result.data);
+                setSalas(prev =>
+                    prev.map(s => (s.id === atualizada.id ? atualizada : s))
+                );
+            } else {
+                const novaSala = await criarSala(result.data);
+                setSalas(prev => [...prev, novaSala]);
+            }
+
+            cancelarEdicao();
         } catch (error) {
-            console.error('Erro ao criar sala', error);
+            console.error('Erro ao salvar sala', error);
         } finally {
             setIsSubmitting(false);
         }
@@ -75,12 +91,12 @@ export default function SalasPage() {
 
     async function handleDelete(id?: number) {
         if (!id) return;
-        const confirmar = window.confirm('Tem certeza que deseja excluir esta sala?');
-        if (!confirmar) return;
+        if (!window.confirm('Excluir esta sala?')) return;
 
         try {
             await excluirSala(id);
             setSalas(prev => prev.filter(s => s.id !== id));
+            if (editingId === id) cancelarEdicao();
         } catch (error) {
             console.error('Erro ao excluir sala', error);
         }
@@ -91,10 +107,12 @@ export default function SalasPage() {
             <h1 className="mb-4">Gestão de Salas</h1>
 
             <div className="row">
-                {/* Formulário */}
+                {/* Form */}
                 <div className="col-lg-4 mb-4">
                     <div className="card">
-                        <div className="card-header">Cadastrar Sala</div>
+                        <div className="card-header">
+                            {editingId ? 'Editar Sala' : 'Cadastrar Sala'}
+                        </div>
                         <div className="card-body">
                             <form onSubmit={handleSubmit} noValidate>
                                 <div className="mb-3">
@@ -107,7 +125,9 @@ export default function SalasPage() {
                                         onChange={handleChange}
                                         min={1}
                                     />
-                                    {errors.numero && <div className="invalid-feedback">{errors.numero}</div>}
+                                    {errors.numero && (
+                                        <div className="invalid-feedback">{errors.numero}</div>
+                                    )}
                                 </div>
 
                                 <div className="mb-3">
@@ -125,19 +145,29 @@ export default function SalasPage() {
                                     )}
                                 </div>
 
-                                <button
-                                    type="submit"
-                                    className="btn btn-primary"
-                                    disabled={isSubmitting}
-                                >
-                                    {isSubmitting ? 'Salvando...' : 'Salvar Sala'}
+                                <button type="submit" className="btn btn-primary w-100" disabled={isSubmitting}>
+                                    {isSubmitting
+                                        ? 'Salvando...'
+                                        : editingId
+                                            ? 'Salvar Alterações'
+                                            : 'Salvar Sala'}
                                 </button>
+
+                                {editingId && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-outline-secondary w-100 mt-2"
+                                        onClick={cancelarEdicao}
+                                    >
+                                        Cancelar edição
+                                    </button>
+                                )}
                             </form>
                         </div>
                     </div>
                 </div>
 
-                {/* Listagem */}
+                {/* Tabela */}
                 <div className="col-lg-8">
                     <div className="card">
                         <div className="card-header">Salas cadastradas</div>
@@ -147,37 +177,39 @@ export default function SalasPage() {
                             ) : salas.length === 0 ? (
                                 <p>Nenhuma sala cadastrada ainda.</p>
                             ) : (
-                                <div className="table-responsive">
-                                    <table className="table table-striped align-middle cine-table">
+                                <table className="table table-striped align-middle">
                                     <thead>
-                                        <tr>
-                                            <th>#</th>
-                                            <th>Número</th>
-                                            <th>Capacidade</th>
-                                            <th className="text-end">Ações</th>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Número</th>
+                                        <th>Capacidade</th>
+                                        <th className="text-end">Ações</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {salas.map(sala => (
+                                        <tr key={sala.id}>
+                                            <td>{sala.id}</td>
+                                            <td>{sala.numero}</td>
+                                            <td>{sala.capacidade}</td>
+                                            <td className="text-end">
+                                                <button
+                                                    className="btn btn-outline-primary btn-sm me-2"
+                                                    onClick={() => preencherParaEdicao(sala)}
+                                                >
+                                                    Editar
+                                                </button>
+                                                <button
+                                                    className="btn btn-outline-danger btn-sm"
+                                                    onClick={() => handleDelete(sala.id)}
+                                                >
+                                                    Excluir
+                                                </button>
+                                            </td>
                                         </tr>
-                                        </thead>
-                                        <tbody>
-                                        {salas.map(sala => (
-                                            <tr key={sala.id}>
-                                                <td>{sala.id}</td>
-                                                <td>{sala.numero}</td>
-                                                <td>{sala.capacidade}</td>
-                                                <td className="text-end">
-                                                    <button
-                                                        type="button"
-                                                        className="btn btn-outline-danger btn-sm"
-                                                        onClick={() => handleDelete(sala.id)}
-                                                    >
-                                                        <i className="bi bi-trash me-1" />
-                                                        Excluir
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                    ))}
+                                    </tbody>
+                                </table>
                             )}
                         </div>
                     </div>

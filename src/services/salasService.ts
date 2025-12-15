@@ -11,6 +11,14 @@ export async function criarSala(payload: Omit<Sala, 'id'>): Promise<Sala> {
     return data;
 }
 
-export async function excluirSala(id: number): Promise<void> {
+export async function atualizarSala(
+    id: string | number,
+    payload: Omit<Sala, 'id'>
+): Promise<Sala> {
+    const { data } = await api.put<Sala>(`/salas/${id}`, payload);
+    return data;
+}
+
+export async function excluirSala(id: string | number): Promise<void> {
     await api.delete(`/salas/${id}`);
 }

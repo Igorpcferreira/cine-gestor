@@ -1,37 +1,6 @@
 {
-  "filmes": [
-    {
-      "id": "f498",
-      "titulo": "Testeeee",
-      "sinopse": "safsdfsfdsfds",
-      "classificacao": "12",
-      "duracaoMin": 121,
-      "genero": "Aventura",
-      "dataInicio": "2026-09-14",
-      "dataFim": "2026-09-14"
-    }
-  ],
-  "salas": [
-    {
-      "id": "87aa",
-      "numero": 12,
-      "capacidade": 111
-    }
-  ],
-  "sessoes": [
-    {
-      "id": "8590",
-      "filmeId": "f498",
-      "salaId": "87aa",
-      "dataHora": "2025-12-06T22:35"
-    }
-  ],
-  "ingressos": [
-    {
-      "id": "4b6c",
-      "sessaoId": "8590",
-      "tipo": "MEIA",
-      "valor": 5.5
-    }
-  ]
+  "filmes": [],
+  "salas": [],
+  "sessoes": [],
+  "ingressos": []
 }

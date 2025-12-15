@@ -11,11 +11,19 @@ export async function criarSessao(payload: Omit<Sessao, 'id'>): Promise<Sessao> 
     return data;
 }
 
-export async function excluirSessao(id: string | number): Promise<void> {
-    await api.delete(`/sessoes/${id}`);
+export async function atualizarSessao(
+    id: string | number,
+    payload: Omit<Sessao, 'id'>
+): Promise<Sessao> {
+    const { data } = await api.put<Sessao>(`/sessoes/${id}`, payload);
+    return data;
 }
 
 export async function buscarSessaoPorId(id: string | number): Promise<Sessao> {
-    const { data } = await api.get<Sessao>(`/sessoes/${id}`);
+    const {data} = await api.get<Sessao>(`/sessoes/${id}`);
     return data;
+}
+
+export async function excluirSessao(id: string | number): Promise<void> {
+    await api.delete(`/sessoes/${id}`);
 }

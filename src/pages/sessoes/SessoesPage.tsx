@@ -1,9 +1,14 @@
-import {type ChangeEvent, type FormEvent, useEffect, useState } from 'react';
+import { type ChangeEvent, type FormEvent, useEffect, useState } from 'react';
 import { sessaoSchema } from '../../schemas/sessaoSchema';
 import type { Sessao } from '../../types/sessao';
 import type { Filme } from '../../types/filme';
 import type { Sala } from '../../types/sala';
-import { listarSessoes, criarSessao, excluirSessao } from '../../services/sessoesService';
+import {
+    listarSessoes,
+    criarSessao,
+    excluirSessao,
+    atualizarSessao,
+} from '../../services/sessoesService';
 import { listarFilmes } from '../../services/filmesService';
 import { listarSalas } from '../../services/salasService';
 import { Link } from 'react-router-dom';
@@ -30,6 +35,7 @@ export default function SessoesPage() {
     const [salas, setSalas] = useState<Sala[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [editingId, setEditingId] = useState<string | number | null>(null);
 
     useEffect(() => {
         async function loadData() {
@@ -49,7 +55,7 @@ export default function SessoesPage() {
             }
         }
 
-        loadData();
+        void loadData();
     }, []);
 
     function handleChange(
@@ -66,6 +72,23 @@ export default function SessoesPage() {
             ...prev,
             [name]: undefined,
         }));
+    }
+
+    function preencherParaEdicao(sessao: Sessao) {
+        setForm({
+            filmeId: sessao.filmeId,
+            salaId: sessao.salaId,
+            dataHora: sessao.dataHora,
+        });
+        setEditingId(sessao.id ?? null);
+        setErrors({});
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function cancelarEdicao() {
+        setEditingId(null);
+        setForm(emptyForm);
+        setErrors({});
     }
 
     async function handleSubmit(event: FormEvent) {
@@ -86,32 +109,52 @@ export default function SessoesPage() {
         }
 
         setErrors({});
-
         const parsed = result.data;
 
         try {
-            const novaSessao = await criarSessao({
-                filmeId: parsed.filmeId,
-                salaId: parsed.salaId,
-                dataHora: parsed.dataHora,
-            });
-            setSessoes(prev => [...prev, novaSessao]);
+            if (editingId !== null) {
+                // EDIÇÃO
+                const atualizada = await atualizarSessao(editingId, {
+                    filmeId: parsed.filmeId,
+                    salaId: parsed.salaId,
+                    dataHora: parsed.dataHora,
+                });
+
+                setSessoes(prev =>
+                    prev.map(s => (s.id === atualizada.id ? atualizada : s)),
+                );
+            } else {
+                // CRIAÇÃO
+                const novaSessao = await criarSessao({
+                    filmeId: parsed.filmeId,
+                    salaId: parsed.salaId,
+                    dataHora: parsed.dataHora,
+                });
+                setSessoes(prev => [...prev, novaSessao]);
+            }
+
             setForm(emptyForm);
+            setEditingId(null);
         } catch (error) {
-            console.error('Erro ao criar sessão', error);
+            console.error('Erro ao salvar sessão', error);
         } finally {
             setIsSubmitting(false);
         }
     }
 
-    async function handleDelete(id?: string | number | undefined) {
+    async function handleDelete(id?: string | number) {
         if (!id) return;
-        const confirmar = window.confirm('Tem certeza que deseja excluir esta sessão?');
+        const confirmar = window.confirm(
+            'Tem certeza que deseja excluir esta sessão?',
+        );
         if (!confirmar) return;
 
         try {
             await excluirSessao(id);
             setSessoes(prev => prev.filter(s => s.id !== id));
+            if (editingId === id) {
+                cancelarEdicao();
+            }
         } catch (error) {
             console.error('Erro ao excluir sessão', error);
         }
@@ -147,7 +190,9 @@ export default function SessoesPage() {
                 {/* Formulário */}
                 <div className="col-lg-4 mb-4">
                     <div className="card">
-                        <div className="card-header">Cadastrar Sessão</div>
+                        <div className="card-header">
+                            {editingId ? 'Editar Sessão' : 'Cadastrar Sessão'}
+                        </div>
                         <div className="card-body">
                             <form onSubmit={handleSubmit} noValidate>
                                 {/* Filme */}
@@ -155,7 +200,9 @@ export default function SessoesPage() {
                                     <label className="form-label">Filme</label>
                                     <select
                                         name="filmeId"
-                                        className={`form-select ${errors.filmeId ? 'is-invalid' : ''}`}
+                                        className={`form-select ${
+                                            errors.filmeId ? 'is-invalid' : ''
+                                        }`}
                                         value={form.filmeId}
                                         onChange={handleChange}
                                     >
@@ -176,7 +223,9 @@ export default function SessoesPage() {
                                     <label className="form-label">Sala</label>
                                     <select
                                         name="salaId"
-                                        className={`form-select ${errors.salaId ? 'is-invalid' : ''}`}
+                                        className={`form-select ${
+                                            errors.salaId ? 'is-invalid' : ''
+                                        }`}
                                         value={form.salaId}
                                         onChange={handleChange}
                                     >
@@ -198,7 +247,9 @@ export default function SessoesPage() {
                                     <input
                                         type="datetime-local"
                                         name="dataHora"
-                                        className={`form-control ${errors.dataHora ? 'is-invalid' : ''}`}
+                                        className={`form-control ${
+                                            errors.dataHora ? 'is-invalid' : ''
+                                        }`}
                                         value={form.dataHora}
                                         onChange={handleChange}
                                     />
@@ -209,11 +260,25 @@ export default function SessoesPage() {
 
                                 <button
                                     type="submit"
-                                    className="btn btn-primary"
+                                    className="btn btn-primary w-100"
                                     disabled={isSubmitting}
                                 >
-                                    {isSubmitting ? 'Salvando...' : 'Salvar Sessão'}
+                                    {isSubmitting
+                                        ? 'Salvando...'
+                                        : editingId
+                                            ? 'Salvar Alterações'
+                                            : 'Salvar Sessão'}
                                 </button>
+
+                                {editingId && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-outline-secondary w-100 mt-2"
+                                        onClick={cancelarEdicao}
+                                    >
+                                        Cancelar edição
+                                    </button>
+                                )}
                             </form>
                         </div>
                     </div>
@@ -231,7 +296,7 @@ export default function SessoesPage() {
                             ) : (
                                 <div className="table-responsive">
                                     <table className="table table-striped align-middle cine-table">
-                                    <thead>
+                                        <thead>
                                         <tr>
                                             <th>#</th>
                                             <th>Filme</th>
@@ -255,6 +320,13 @@ export default function SessoesPage() {
                                                         >
                                                             Vender Ingresso
                                                         </Link>
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-outline-primary"
+                                                            onClick={() => preencherParaEdicao(sessao)}
+                                                        >
+                                                            Editar
+                                                        </button>
                                                         <button
                                                             type="button"
                                                             className="btn btn-outline-danger"

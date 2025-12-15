@@ -1,7 +1,17 @@
-import {type FormEvent, useEffect, useState, type ChangeEvent } from 'react';
+import {
+    type FormEvent,
+    useEffect,
+    useState,
+    type ChangeEvent,
+} from 'react';
 import { filmeSchema, type FilmeFormData } from '../../schemas/filmeSchema';
 import type { Filme } from '../../types/filme';
-import { listarFilmes, criarFilme, excluirFilme } from '../../services/filmesService';
+import {
+    listarFilmes,
+    criarFilme,
+    excluirFilme,
+    atualizarFilme,
+} from '../../services/filmesService';
 
 type FormErrors = Partial<Record<keyof FilmeFormData, string>>;
 
@@ -20,6 +30,7 @@ export function FilmesPage() {
     const [form, setForm] = useState<FilmeFormData>(emptyForm);
     const [errors, setErrors] = useState<FormErrors>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [editingId, setEditingId] = useState<string | number | null>(null);
 
     useEffect(() => {
         (async () => {
@@ -36,14 +47,35 @@ export function FilmesPage() {
         event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
     ) {
         const { name, value } = event.target;
-        setForm(prev => ({
+        setForm((prev) => ({
             ...prev,
             [name]: name === 'duracaoMin' ? Number(value) || 0 : value,
         }));
-        setErrors(prev => ({
+        setErrors((prev) => ({
             ...prev,
             [name]: undefined,
         }));
+    }
+
+    function preencherFormParaEdicao(filme: Filme) {
+        setForm({
+            titulo: filme.titulo,
+            sinopse: filme.sinopse,
+            classificacao: filme.classificacao,
+            duracaoMin: filme.duracaoMin,
+            genero: filme.genero,
+            dataInicio: filme.dataInicio,
+            dataFim: filme.dataFim,
+        });
+        setEditingId(filme.id ?? null);
+        setErrors({});
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function cancelarEdicao() {
+        setEditingId(null);
+        setForm(emptyForm);
+        setErrors({});
     }
 
     async function handleSubmit(event: FormEvent) {
@@ -54,7 +86,7 @@ export function FilmesPage() {
 
         if (!result.success) {
             const fieldErrors: FormErrors = {};
-            result.error.issues.forEach(issue => {
+            result.error.issues.forEach((issue) => {
                 const fieldName = issue.path[0] as keyof FilmeFormData;
                 fieldErrors[fieldName] = issue.message;
             });
@@ -64,24 +96,42 @@ export function FilmesPage() {
         }
 
         try {
-            const novoFilme = await criarFilme(result.data);
-            setFilmes(prev => [...prev, novoFilme]);
+            const payload = result.data;
+
+            if (editingId !== null) {
+                // edição
+                const atualizado = await atualizarFilme(editingId, payload);
+                setFilmes((prev) =>
+                    prev.map((f) => (f.id === atualizado.id ? atualizado : f)),
+                );
+            } else {
+                // inclusão
+                const novoFilme = await criarFilme(payload);
+                setFilmes((prev) => [...prev, novoFilme]);
+            }
+
             setForm(emptyForm);
+            setEditingId(null);
         } catch (error) {
-            console.error('Erro ao criar filme', error);
+            console.error('Erro ao salvar filme', error);
         } finally {
             setIsSubmitting(false);
         }
     }
 
-    async function handleDelete(id?: number) {
+    async function handleDelete(id?: string | number) {
         if (!id) return;
-        const confirmar = window.confirm('Tem certeza que deseja excluir este filme?');
+        const confirmar = window.confirm(
+            'Tem certeza que deseja excluir este filme?',
+        );
         if (!confirmar) return;
 
         try {
             await excluirFilme(id);
-            setFilmes(prev => prev.filter(f => f.id !== id));
+            setFilmes((prev) => prev.filter((f) => f.id !== id));
+            if (editingId === id) {
+                cancelarEdicao();
+            }
         } catch (error) {
             console.error('Erro ao excluir filme', error);
         }
@@ -96,7 +146,7 @@ export function FilmesPage() {
                 <div className="col-lg-5 mb-4">
                     <div className="card">
                         <div className="card-header">
-                            <strong>Novo Filme</strong>
+                            <strong>{editingId ? 'Editar Filme' : 'Novo Filme'}</strong>
                         </div>
                         <div className="card-body">
                             <form onSubmit={handleSubmit} noValidate>
@@ -106,11 +156,15 @@ export function FilmesPage() {
                                     <input
                                         type="text"
                                         name="titulo"
-                                        className={`form-control ${errors.titulo ? 'is-invalid' : ''}`}
+                                        className={`form-control ${
+                                            errors.titulo ? 'is-invalid' : ''
+                                        }`}
                                         value={form.titulo}
                                         onChange={handleChange}
                                     />
-                                    {errors.titulo && <div className="invalid-feedback">{errors.titulo}</div>}
+                                    {errors.titulo && (
+                                        <div className="invalid-feedback">{errors.titulo}</div>
+                                    )}
                                 </div>
 
                                 {/* Gênero */}
@@ -119,11 +173,15 @@ export function FilmesPage() {
                                     <input
                                         type="text"
                                         name="genero"
-                                        className={`form-control ${errors.genero ? 'is-invalid' : ''}`}
+                                        className={`form-control ${
+                                            errors.genero ? 'is-invalid' : ''
+                                        }`}
                                         value={form.genero}
                                         onChange={handleChange}
                                     />
-                                    {errors.genero && <div className="invalid-feedback">{errors.genero}</div>}
+                                    {errors.genero && (
+                                        <div className="invalid-feedback">{errors.genero}</div>
+                                    )}
                                 </div>
 
                                 {/* Classificação */}
@@ -132,12 +190,16 @@ export function FilmesPage() {
                                     <input
                                         type="text"
                                         name="classificacao"
-                                        className={`form-control ${errors.classificacao ? 'is-invalid' : ''}`}
+                                        className={`form-control ${
+                                            errors.classificacao ? 'is-invalid' : ''
+                                        }`}
                                         value={form.classificacao}
                                         onChange={handleChange}
                                     />
                                     {errors.classificacao && (
-                                        <div className="invalid-feedback">{errors.classificacao}</div>
+                                        <div className="invalid-feedback">
+                                            {errors.classificacao}
+                                        </div>
                                     )}
                                 </div>
 
@@ -147,13 +209,17 @@ export function FilmesPage() {
                                     <input
                                         type="number"
                                         name="duracaoMin"
-                                        className={`form-control ${errors.duracaoMin ? 'is-invalid' : ''}`}
+                                        className={`form-control ${
+                                            errors.duracaoMin ? 'is-invalid' : ''
+                                        }`}
                                         value={form.duracaoMin || ''}
                                         onChange={handleChange}
                                         min={1}
                                     />
                                     {errors.duracaoMin && (
-                                        <div className="invalid-feedback">{errors.duracaoMin}</div>
+                                        <div className="invalid-feedback">
+                                            {errors.duracaoMin}
+                                        </div>
                                     )}
                                 </div>
 
@@ -164,12 +230,16 @@ export function FilmesPage() {
                                         <input
                                             type="date"
                                             name="dataInicio"
-                                            className={`form-control ${errors.dataInicio ? 'is-invalid' : ''}`}
+                                            className={`form-control ${
+                                                errors.dataInicio ? 'is-invalid' : ''
+                                            }`}
                                             value={form.dataInicio}
                                             onChange={handleChange}
                                         />
                                         {errors.dataInicio && (
-                                            <div className="invalid-feedback">{errors.dataInicio}</div>
+                                            <div className="invalid-feedback">
+                                                {errors.dataInicio}
+                                            </div>
                                         )}
                                     </div>
                                     <div className="col-md-6 mb-3">
@@ -177,12 +247,16 @@ export function FilmesPage() {
                                         <input
                                             type="date"
                                             name="dataFim"
-                                            className={`form-control ${errors.dataFim ? 'is-invalid' : ''}`}
+                                            className={`form-control ${
+                                                errors.dataFim ? 'is-invalid' : ''
+                                            }`}
                                             value={form.dataFim}
                                             onChange={handleChange}
                                         />
                                         {errors.dataFim && (
-                                            <div className="invalid-feedback">{errors.dataFim}</div>
+                                            <div className="invalid-feedback">
+                                                {errors.dataFim}
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -193,11 +267,15 @@ export function FilmesPage() {
                                     <textarea
                                         name="sinopse"
                                         rows={3}
-                                        className={`form-control ${errors.sinopse ? 'is-invalid' : ''}`}
+                                        className={`form-control ${
+                                            errors.sinopse ? 'is-invalid' : ''
+                                        }`}
                                         value={form.sinopse}
                                         onChange={handleChange}
                                     />
-                                    {errors.sinopse && <div className="invalid-feedback">{errors.sinopse}</div>}
+                                    {errors.sinopse && (
+                                        <div className="invalid-feedback">{errors.sinopse}</div>
+                                    )}
                                 </div>
 
                                 <button
@@ -205,8 +283,22 @@ export function FilmesPage() {
                                     className="btn btn-primary w-100"
                                     disabled={isSubmitting}
                                 >
-                                    {isSubmitting ? 'Salvando...' : 'Salvar Filme'}
+                                    {isSubmitting
+                                        ? 'Salvando...'
+                                        : editingId
+                                            ? 'Salvar alterações'
+                                            : 'Salvar Filme'}
                                 </button>
+
+                                {editingId && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-outline-secondary w-100 mt-2"
+                                        onClick={cancelarEdicao}
+                                    >
+                                        Cancelar edição
+                                    </button>
+                                )}
                             </form>
                         </div>
                     </div>
@@ -219,9 +311,9 @@ export function FilmesPage() {
                     {filmes.length === 0 && <p>Nenhum filme cadastrado ainda.</p>}
 
                     <div className="row row-cols-1 row-cols-md-2 g-3">
-                        {filmes.map(filme => (
+                        {filmes.map((filme) => (
                             <div key={filme.id} className="col">
-                                <div className="card h-100 cine-card-hover">
+                                <div className="card h-100">
                                     <div className="card-body d-flex flex-column">
                                         <div className="d-flex justify-content-between align-items-start mb-2">
                                             <h3 className="h5 mb-0">
@@ -229,31 +321,42 @@ export function FilmesPage() {
                                                 {filme.titulo}
                                             </h3>
                                             <span className="badge text-bg-secondary">
-                                                {filme.classificacao}
-                                            </span>
+                        {filme.classificacao}
+                      </span>
                                         </div>
 
                                         <p className="mb-1">
-                                            <span className="cine-movie-chip me-2">
-                                                {filme.genero}
-                                            </span>
+                      <span className="cine-movie-chip me-2">
+                        {filme.genero}
+                      </span>
                                             <span className="text-muted small">
-                                                {filme.classificacao} • {filme.duracaoMin} min
-                                            </span>
+                        {filme.classificacao} • {filme.duracaoMin} min
+                      </span>
                                         </p>
 
                                         <p className="card-text flex-grow-1">
                                             {filme.sinopse}
                                         </p>
 
-                                        <button
-                                            type="button"
-                                            className="btn btn-outline-danger btn-sm mt-2 align-self-end"
-                                            onClick={() => handleDelete(filme.id)}
-                                        >
-                                            <i className="bi bi-trash me-1" />
-                                            Excluir
-                                        </button>
+                                        <div className="d-flex justify-content-between mt-2">
+                                            <button
+                                                type="button"
+                                                className="btn btn-outline-primary btn-sm"
+                                                onClick={() => preencherFormParaEdicao(filme)}
+                                            >
+                                                <i className="bi bi-pencil-square me-1" />
+                                                Editar
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                className="btn btn-outline-danger btn-sm align-self-end"
+                                                onClick={() => handleDelete(filme.id)}
+                                            >
+                                                <i className="bi bi-trash me-1" />
+                                                Excluir
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
